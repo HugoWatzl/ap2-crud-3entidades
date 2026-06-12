@@ -1,0 +1,95 @@
+O que já está salvo no sistema
+Quando a aplicação sobe, o DataInitializer cria automaticamente:
+3 Categorias:
+IDNomeDescrição1EletrônicosDispositivos eletrônicos e gadgets2VestuárioRoupas, calçados e acessórios3AlimentosProdutos alimentícios e bebidas
+7 Produtos:
+IDNomePreçoCategoria1Smartphone Galaxy X10R$ 1999,99Eletrônicos2Notebook ProBook 15R$ 4500,00Eletrônicos3Fone Bluetooth ANCR$ 299,90Eletrônicos4Camiseta Básica PremiumR$ 59,90Vestuário5Tênis Urban RunR$ 349,90Vestuário6Café Especial 250gR$ 34,90Alimentos7Chocolate Amargo 70%R$ 18,50Alimentos
+
+Passo a passo para apresentar ao professor
+Passo 1 — Subir a aplicação
+bashmvn spring-boot:run
+Fale: "A aplicação usa banco H2 em memória, não precisa instalar nada. Ao subir, ela já popula o banco com dados de teste automaticamente."
+
+Passo 2 — Abrir o Swagger
+Acesse http://localhost:8080/swagger-ui.html
+Fale: "Aqui está a documentação automática gerada pelo Springdoc. Todas as rotas, parâmetros e respostas estão documentados. Posso testar tudo daqui sem Postman."
+Mostre os 3 grupos: Categorias, Produtos e Pedidos.
+
+Passo 3 — Mostrar o CRUD de Categoria
+Expanda o grupo Categorias e execute nessa ordem:
+GET /api/categories → mostra as 3 categorias já criadas
+POST /api/categories → cria uma nova, use:
+json{
+  "name": "Informática",
+  "description": "Periféricos e acessórios para computador"
+}
+GET /api/categories/4 → busca a que acabou de criar
+PUT /api/categories/4 → atualiza:
+json{
+  "name": "Informática e Periféricos",
+  "description": "Teclados, mouses e afins"
+}
+DELETE /api/categories/4 → remove
+Fale: "Aqui demonstrei o CRUD completo da primeira entidade."
+
+Passo 4 — Mostrar o relacionamento 1:N com Produto
+POST /api/products → cria um produto vinculado à categoria 1:
+json{
+  "name": "Monitor 27 polegadas",
+  "description": "Full HD, 144Hz",
+  "price": 1299.90,
+  "stockQuantity": 30,
+  "categoryId": 1
+}
+GET /api/products/category/1 → lista todos os produtos da categoria Eletrônicos
+Fale: "Aqui fica claro o relacionamento 1:N — uma categoria agrupa vários produtos. O produto carrega o ID da categoria como chave estrangeira no banco."
+
+Passo 5 — Mostrar o padrão Strategy no pedido
+POST /api/orders → crie um pedido SEM desconto primeiro:
+json{
+  "customerName": "Professor Teste",
+  "discountType": "NONE",
+  "items": [
+    { "productId": 1, "quantity": 1 },
+    { "productId": 3, "quantity": 2 }
+  ]
+}
+O total será: 1999,99 + (299,90 × 2) = R$ 2599,79
+Depois crie outro COM desconto de 20%:
+json{
+  "customerName": "Cliente VIP",
+  "discountType": "PERCENTAGE_20",
+  "items": [
+    { "productId": 1, "quantity": 1 },
+    { "productId": 3, "quantity": 2 }
+  ]
+}
+O total será: 2599,79 × 0,80 = R$ 2079,83
+Fale: "Esse é o padrão Strategy. O serviço não tem if/else para calcular desconto — ele delega para uma interface. Dependendo do discountType, a factory retorna uma implementação diferente: NoDiscountStrategy ou PercentageDiscountStrategy. Para adicionar um novo desconto basta criar uma classe nova, sem tocar no serviço. Isso é o princípio Open/Closed do SOLID."
+
+Passo 6 — Mostrar o padrão Observer na mudança de status
+PATCH /api/orders/1/status:
+json{ "status": "CONFIRMED" }
+Agora olhe o terminal onde a aplicação está rodando. Vai aparecer algo assim:
+>>> Publicando evento: Pedido #1 — PENDING → CONFIRMED
+[LOG OBSERVER]   Pedido #1 do cliente 'Professor Teste' | Status: PENDING → CONFIRMED
+[STOCK OBSERVER] Pedido #1 confirmado — reservando 2 item(ns) no estoque.
+  → Reservado: 1 x 'Smartphone Galaxy X10'
+  → Reservado: 2 x 'Fone Bluetooth ANC'
+Depois cancele:
+json{ "status": "CANCELLED" }
+[STOCK OBSERVER] Pedido #1 cancelado — devolvendo 2 item(ns) ao estoque.
+Fale: "Esse é o padrão Observer. O OrderService não sabe quem vai reagir à mudança de status — ele só publica o evento. O LogOrderObserver e o StockOrderObserver são notificados automaticamente. O Spring injeta todos os beans que implementam a interface OrderObserver na lista do publisher. Para adicionar um novo comportamento, como enviar email, basta criar uma nova classe — o serviço não muda nada."
+
+Passo 7 — Mostrar o N:M no banco (ponto extra)
+Abra http://localhost:8080/h2-console
+
+JDBC URL: jdbc:h2:mem:cruddb
+User: sa | Password: vazio
+
+Execute no console SQL:
+sqlSELECT o.id, o.customer_name, o.total, p.name, oi.quantity, oi.unit_price
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.id
+JOIN products p ON p.id = oi.product_id;
+Fale: "Aqui fica visível o relacionamento N:M no banco. A tabela order_items é a tabela de junção entre orders e products. Um pedido tem vários produtos e um produto pode aparecer em vários pedidos."
